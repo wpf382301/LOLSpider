@@ -365,7 +365,7 @@ class MyRadioButton(QRadioButton):
         self.cursor = cursor_
 
     def focusInEvent(self, e: QtGui.QFocusEvent):
-        if not self.top_layout and not self.cursor:
+        if not self.top_layout or not self.cursor:
             return
         content_widget_old = self.top_layout.itemAt(1).widget()
         content_widget_new = make_content_widget(self.cursor, self.table, self.tag)
@@ -438,10 +438,10 @@ class MyProgressDialog(QDialog):
         self.setWindowFlags(QtCore.Qt.WindowCloseButtonHint)
         self.setFixedSize(self.progressbar.width(), self.progressbar.height())
 
-    def execute(self, target, type_update):
+    def execute(self, target):
         self.progressbar.onStart()
         self.target = target
-        self.thread = threading.Thread(target=target.main_external, args=(self.progressbar, type_update))
+        self.thread = threading.Thread(target=target.main_external, args=(self.progressbar, ))
         self.thread.start()
         self.show()
 

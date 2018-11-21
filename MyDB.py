@@ -96,53 +96,15 @@ def create_table_equipment(cursor_):
         print(e)
 
 
-def create_table_equipment_1(cursor_):
-    sql_create_table_equipment_1 = "CREATE TABLE `equipment_1` (" \
-                                   "`name` varchar(255) NOT NULL," \
-                                   "`起始装备` varchar(255) DEFAULT NULL," \
-                                   "`核心物品` varchar(255) DEFAULT NULL," \
-                                   "`进攻型物品` varchar(255) DEFAULT NULL," \
-                                   "`防御型物品` varchar(255) DEFAULT NULL," \
-                                   "PRIMARY KEY (`name`)," \
-                                   "CONSTRAINT `equipment_1_ibfk_1` FOREIGN KEY (`name`) REFERENCES " \
-                                   "`hero` (`name`) ON DELETE CASCADE ON UPDATE CASCADE)"
-    try:
-        cursor_.execute(sql_create_table_equipment_1)
-    except Exception as e:
-        print(sql_create_table_equipment_1)
-        print(e)
-
-
-def create_table_equipment_2(cursor_):
-    sql_create_table_equipment_2 = "CREATE TABLE `equipment_2` (" \
-                                   "`name` varchar(255) NOT NULL," \
-                                   "`起始装备` varchar(255) DEFAULT NULL," \
-                                   "`核心物品` varchar(255) DEFAULT NULL," \
-                                   "`进攻型物品` varchar(255) DEFAULT NULL," \
-                                   "`防御型物品` varchar(255) DEFAULT NULL," \
-                                   "PRIMARY KEY (`name`)," \
-                                   "CONSTRAINT `equipment_2_ibfk_1` FOREIGN KEY (`name`) REFERENCES " \
-                                   "`hero` (`name`) ON DELETE CASCADE ON UPDATE CASCADE)"
-    try:
-        cursor_.execute(sql_create_table_equipment_2)
-    except Exception as e:
-        print(sql_create_table_equipment_2)
-        print(e)
-
-
-def create_tables(tables, cursor):
-    if "hero" not in tables:
+def create_tables(tables, cursor: sqlite3.Cursor):
+    if "hero" in tables:
         create_table_hero(cursor)
-    if "skill" not in tables:
+    if "skill" in tables:
         create_table_skill(cursor)
-    if "skin" not in tables:
+    if "skin" in tables:
         create_table_skin(cursor)
-    if "equipment" not in tables:
+    if "equipment" in tables:
         create_table_equipment(cursor)
-    if "equipment_1" not in tables:
-        create_table_equipment_1(cursor)
-    if "equipment_2" not in tables:
-        create_table_equipment_2(cursor)
 
 
 def drop_table(table, cursor_):
@@ -193,6 +155,24 @@ def find_hero_skin(name, cursor_):
     return result
 
 
+def find_special_skin(skin_name, cursor_: sqlite3.Cursor):
+    result = None
+    sql = "SELECT skin_name from skin where skin_name = '" + skin_name.replace("'", "''") + "'"
+    try:
+        cursor_.execute(sql)
+        result = cursor_.fetchone()
+    except sqlite3.OperationalError:
+        print(sql)
+        # drop_table("skin", cursor_)
+        print("未找到skin表,重新创建")
+        create_table_skin(cursor_)
+        result = find_hero_skin(skin_name, cursor_)
+    except Exception as e:
+        print(sql)
+        print(e)
+    return result
+
+
 def find_hero_skill(name, cursor_):
     result = None
     sql = "SELECT * from skill where name = '" + name + "'"
@@ -211,20 +191,17 @@ def find_hero_skill(name, cursor_):
     return result
 
 
-def check_db(cursor_):
+def check_db(cursor_: sqlite3.Cursor):
+    db_tables = ['hero', 'skin', 'skill', 'equipment', 'equipment_1', 'equipment_2']
+    ck_tables = []
     sql = "SELECT name FROM sqlite_master where type='table'"
     try:
         cursor_.execute(sql)
         result = cursor_.fetchall()
-        if result:
-            tables = []
+        if not result or len(result) < len(db_tables):
             for _ in result:
-                tables.append(_[0])
-            create_tables(tables, cursor_)
-            if len(result) < 6:
-                return False
-            else:
-                return True
+                ck_tables.append(_[0])
+            create_tables((set(db_tables) - set(ck_tables)), cursor_)
     except Exception as e:
         print(e)
 
@@ -328,6 +305,19 @@ def save_to_sqlite3_hero(cursor, hero_name, hero_tags, hero_attributes_dic, prof
         print(e)
 
 
+def update_sqlite3_hero(cursor, hero_name, hero_tags, hero_attributes_dic, profile_dir):
+    sql_1 = "UPDATE hero SET name='" + hero_name + "', tag='" + ','.join(hero_tags) + "', profile='" + profile_dir + "'"
+    sql_2 = ""
+    for key in hero_attributes_dic.keys():
+        sql_2 = sql_2 + ", " + key + "='" + hero_attributes_dic[key] + "'"
+    sql = sql_1 + sql_2 + "WHERE name='" + hero_name + "'"
+    try:
+        cursor.execute(sql)
+    except Exception as e:
+        print(sql)
+        print(e)
+
+
 def save_to_sqlite3_skill(cursor, hero_name, skills_dic, skills_dir):
     sql_1 = "INSERT INTO skill(name"
     sql_2 = " VALUES('" + hero_name + "'"
@@ -338,10 +328,26 @@ def save_to_sqlite3_skill(cursor, hero_name, skills_dic, skills_dir):
                 sql_2 = sql_2 + ",'" + make_local_dir(
                     skills_dic[key][_], skills_dir, check_name_valid(skills_dic[key][key + '_name'])) + "'"
             else:
-                sql_2 = sql_2 + ",'" + skills_dic[key][_] + "'"
+                sql_2 = sql_2 + ",'" + skills_dic[key][_].replace("'", "''") + "'"
     sql_1 = sql_1 + ")"
     sql_2 = sql_2 + ")"
     sql = sql_1 + sql_2
+    try:
+        cursor.execute(sql)
+    except Exception as e:
+        print(sql)
+        print(e)
+
+
+def update_to_sqlite3_skill(cursor, hero_name, skills_dic, skills_dir):
+    sql_1 = "UPDATE skill set name='" + hero_name + "'"
+    for key in skills_dic.keys():
+        for _ in skills_dic[key].keys():
+            if '_img' in _:
+                sql_1 = sql_1 + "," + _ + "='" + make_local_dir(skills_dic[key][_], skills_dir, check_name_valid(skills_dic[key][key + '_name'])) + "'"
+            else:
+                sql_1 = sql_1 + "," + _ + "='" + skills_dic[key][_].replace("'", "''") + "'"
+    sql = sql_1 + "WHERE name='" + hero_name + "'"
     try:
         cursor.execute(sql)
     except Exception as e:
@@ -350,9 +356,11 @@ def save_to_sqlite3_skill(cursor, hero_name, skills_dic, skills_dir):
 
 
 def save_to_sqlite3_skin(cursor, hero_name, hero_img_url, skin_dir, name):
-    sql = "INSERT INTO skin(name, skin_name, skin_img)" \
-          + " VALUES('" + hero_name + "','" + name.replace("'", "''") + "','" \
-          + make_local_dir(hero_img_url, skin_dir, check_name_valid(name)).replace("'", "''") + "')"
+    sql = "INSERT INTO skin(name, skin_name, skin_img)  VALUES('{}','{}','{}')".format(
+        hero_name,
+        name.replace("'", "''"),
+        make_local_dir(hero_img_url, skin_dir, check_name_valid(name)).replace("'", "''")
+    )
     try:
         cursor.execute(sql)
     except Exception as e:
@@ -360,15 +368,13 @@ def save_to_sqlite3_skin(cursor, hero_name, hero_img_url, skin_dir, name):
         print(e)
 
 
-def save_to_sqlite3_equipment(cursor, table_name, hero_name, equipment_dic):
-    sql_1 = "INSERT INTO `" + table_name + "`(name"
-    sql_2 = " VALUES(`" + hero_name + "`"
-    for key in equipment_dic.keys():
-        sql_1 = sql_1 + ",`" + key + "`"
-        sql_2 = sql_2 + ",'" + ','.join(equipment_dic[key]) + "'"
-    sql_1 = sql_1 + ")"
-    sql_2 = sql_2 + ")"
-    sql = sql_1 + sql_2
+def update_sqlite3_skin(cursor, hero_name, hero_img_url, skin_dir, name):
+    sql = "UPDATE skin set name='{}', skin_name='{}', skin_img='{}' WHERE skin_name='{}' AND name='{}'".format(
+        hero_name,
+        name.replace("'", "''"),
+        make_local_dir(hero_img_url, skin_dir, check_name_valid(name)).replace("'", "''"),
+        name.replace("'", "''"), hero_name
+    )
     try:
         cursor.execute(sql)
     except Exception as e:
@@ -376,24 +382,33 @@ def save_to_sqlite3_equipment(cursor, table_name, hero_name, equipment_dic):
         print(e)
 
 
-def save_to_sqlite3_equipment_1(cursor, equipment_dir, equipment_dic):
-    sql = "INSERT INTO equipment(id, name, cost, levellimit, grouplimit, stats, consumable, active," \
-          " passive, uniques, others, rules, tree, img)" + " VALUES(" + \
-          equipment_dic["id"] + ",'" + \
-          equipment_dic["name"] + "'," + \
-          equipment_dic["cost"] + ",'" + \
-          ",".join(equipment_dic["levellimit"]) + "','" + \
-          ",".join(equipment_dic["grouplimit"]) + "','" + \
-          ",".join(equipment_dic["stats"]) + "','" + \
-          ",".join(equipment_dic["consumable"]) + "','" + \
-          ",".join(equipment_dic["active"]) + "','" + \
-          ",".join(equipment_dic["passive"]) + "','" + \
-          ",".join(equipment_dic["unique"]) + "','" + \
-          ",".join(equipment_dic["others"]) + "','" + \
-          ",".join(equipment_dic["rules"]).replace("'", "''") + "','" + \
-          ",".join(equipment_dic["tree"]) + "','" + \
-          make_local_dir(equipment_dic["img"], equipment_dir,
-                         check_name_valid(equipment_dic["id"])) + "')"
+def save_to_sqlite3_equipment(cursor, equipment_dir, equipment_dic):
+    sql = "INSERT INTO equipment(id, name, cost, stats, tree, tag, img) VALUES({}, '{}', {}, '{}', '{}', '{}', '{}')".format(
+        str(equipment_dic["id"]),
+        equipment_dic["name"],
+        equipment_dic["cost"],
+        equipment_dic["stats"],
+        ",".join(equipment_dic["tree"]),
+        ",".join(equipment_dic["tag"]),
+        make_local_dir(equipment_dic["img"], equipment_dir, check_name_valid(equipment_dic["id"]))
+    )
+    try:
+        cursor.execute(sql)
+    except Exception as e:
+        print(sql)
+        print(e)
+
+
+def update_sqlite3_equipment(cursor, equipment_dir, equipment_dic):
+    sql = "UPDATE equipment SET id={}, name='{}', cost={}, stats='{}', tree='{}', tag='{}', img='{}' WHERE id={}".format(
+        equipment_dic["id"],
+        equipment_dic["name"],
+        equipment_dic["cost"],
+        equipment_dic["stats"],
+        ",".join(equipment_dic["tree"]),
+        ",".join(equipment_dic["tag"]),
+        make_local_dir(equipment_dic["img"], equipment_dir, check_name_valid(equipment_dic["id"])),
+        equipment_dic['id'])
     try:
         cursor.execute(sql)
     except Exception as e:

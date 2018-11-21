@@ -2,8 +2,8 @@ import sqlite3
 import sys
 
 from PyQt5 import QtCore, QtWidgets
-from PyQt5.QtGui import QPixmap, QIcon
-from PyQt5.QtWidgets import QApplication, QTabWidget, QAction, QMessageBox, QSplashScreen, QDesktopWidget
+from PyQt5.QtGui import QPixmap, QIcon, QCloseEvent
+from PyQt5.QtWidgets import QApplication, QTabWidget, QAction, QSplashScreen, QDesktopWidget
 
 from LOLByTencent import LOLSpider
 from MyDB import check_db
@@ -11,26 +11,21 @@ from MyUI import MyMainWindow, MyProgressDialog, make_tab
 
 
 class MyGUI(MyMainWindow):
-    def __init__(self, cursor_: sqlite3.Cursor):
+    def __init__(self):
         self.app = QApplication(sys.argv)
         super(MyGUI, self).__init__()
+        self.conn = sqlite3.connect("lol.db")
+        self.cursor = self.conn.cursor()
         self.tab = QTabWidget()
-        self.cursor = cursor_
         self.setWindowTitle("LOL")
         self.setWindowIcon(QIcon("logo.png"))
         self.make_menu()
         self.setCentralWidget(self.tab)
         self.main()
 
-    def update_(self, type_update):
-        if type_update == 1:
-            reply = QMessageBox.warning(self, "提示", "本操作需要火狐(Firefox)浏览器支持,请确保已安装火狐浏览器!",
-                                        QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-            if reply == QMessageBox.No:
-                return
+    def update_(self):
         d = MyProgressDialog(self)
-        spider = LOLSpider()
-        d.execute(spider, type_update)
+        d.execute(LOLSpider())
 
     def refresh_tab(self):
         self.tab.clear()
@@ -46,44 +41,41 @@ class MyGUI(MyMainWindow):
         self.center()
 
     def make_menu(self):
-        update_action = QAction('&更新(慢)', self)
+        update_action = QAction('&更新', self)
         update_action.setShortcut('Ctrl+U')
-        update_action.setToolTip('更新数据(慢)')
-        update_action.triggered.connect(lambda: self.update_(0))
-
-        update_action_ = QAction('&更新(快)', self)
-        update_action_.setShortcut('Ctrl+F')
-        update_action_.setToolTip('更新数据(快)')
-        update_action_.triggered.connect(lambda: self.update_(1))
+        update_action.setToolTip('更新数据')
+        update_action.triggered.connect(lambda: self.update_())
 
         exit_action = QAction('&退出', self)
         exit_action.setShortcut('Ctrl+Q')
         exit_action.setToolTip('退出程序')
         exit_action.triggered.connect(self.close)
 
-        menubar = self.menuBar()
-        file_menu = menubar.addMenu('&File')
+        file_menu = self.menuBar().addMenu('&File')
         file_menu.addAction(update_action)
-        file_menu.addAction(update_action_)
         file_menu.addAction(exit_action)
+
+    def load_data(self):
+        check_db(self.cursor)
+        self.refresh_tab()
+
+    def closeEvent(self, a0: QCloseEvent):
+        super().closeEvent(a0)
+        self.cursor.close()
+        self.conn.close()
 
     def main(self):
         splash = QSplashScreen(QPixmap("loading.png"))
         splash.showMessage('启动中...', QtCore.Qt.AlignBottom | QtCore.Qt.AlignHCenter)
         splash.show()
         QtWidgets.qApp.processEvents()
-        check_db(self.cursor)
 
-        self.refresh_tab()
-
+        self.load_data()
         self.show()
         splash.finish(self)
+
         sys.exit(self.app.exec_())
 
 
 if __name__ == '__main__':
-    conn = sqlite3.connect("lol.db")
-    cursor = conn.cursor()
-    MyGUI(cursor)
-    cursor.close()
-    conn.close()
+    MyGUI()
